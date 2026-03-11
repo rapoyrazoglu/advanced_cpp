@@ -1,0 +1,523 @@
+\documentclass[a4paper,12pt]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[turkish]{babel}
+\usepackage{geometry}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{hyperref}
+\usepackage{tcolorbox}
+\usepackage{tikz}
+\usepackage{amssymb}
+
+\geometry{margin=2.5cm}
+
+\definecolor{codebg}{RGB}{245,245,245}
+\definecolor{codeframe}{RGB}{200,200,200}
+\definecolor{keyword}{RGB}{0,0,180}
+\definecolor{comment}{RGB}{0,128,0}
+\definecolor{string}{RGB}{163,21,21}
+
+\lstdefinestyle{cppstyle}{
+    language=C++,
+    backgroundcolor=\color{codebg},
+    frame=single,
+    rulecolor=\color{codeframe},
+    basicstyle=\ttfamily\small,
+    keywordstyle=\color{keyword}\bfseries,
+    commentstyle=\color{comment}\itshape,
+    stringstyle=\color{string},
+    showstringspaces=false,
+    breaklines=true,
+    tabsize=4,
+    morekeywords={consteval,constexpr,static_assert,decltype,nullptr,auto,requires},
+    literate={ç}{{\c{c}}}1 {ş}{{\c{s}}}1 {ğ}{{ğ}}1 {ü}{{\"u}}1 {ö}{{\"o}}1 {ı}{{\i}}1
+             {Ç}{{\c{C}}}1 {Ş}{{\c{S}}}1 {Ğ}{{Ğ}}1 {Ü}{{\"U}}1 {Ö}{{\"O}}1 {İ}{{\.I}}1
+}
+\lstset{style=cppstyle}
+
+\newtcolorbox{notebox}{
+    colback=blue!5,
+    colframe=blue!40,
+    fonttitle=\bfseries,
+    title={Önemli Not},
+    sharp corners,
+    boxrule=0.5pt
+}
+
+\title{\textbf{Ders 1 --- Value Categories, Referans Türleri ve \texttt{decltype} Kuralları}}
+\author{İleri C++ (C++26 uyumlu)}
+\date{24 Mart 2025}
+
+\begin{document}
+
+\maketitle
+
+\noindent\textbf{Kapsam:} Expression value categories, referans bağlama kuralları, \texttt{decltype} tür çıkarımı
+
+\tableofcontents
+\newpage
+
+%==============================================================================
+\section{İfade (Expression) Temelleri}
+
+Her ifadenin iki temel niteliği vardır:
+
+\begin{table}[h]
+\centering
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{Nitelik} & \textbf{Açıklama} \\
+\midrule
+\textbf{Data Type} (Tür) & İfadenin ürettiği değerin türü (\texttt{int}, \texttt{double}, \texttt{std::string} vb.) \\
+\textbf{Value Category} & İfadenin bellekteki konumu ve taşınabilirliğiyle ilgili sınıflandırması \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{İfade Türü Hakkında Kritik Kurallar}
+
+\begin{itemize}
+    \item İfadelerin türü \textbf{referans türü olamaz}. \texttt{int\& r = x;} bildiriminde \texttt{r} ifadesinin türü \texttt{int}'tir, \texttt{int\&} değil.
+    \item İfadelerin türü \textbf{pointer türü olabilir}: \texttt{int* p = \&x;} $\rightarrow$ \texttt{p} ifadesinin türü \texttt{int*}.
+    \item \texttt{void} bir türdür; \texttt{void} fonksiyona yapılan çağrı ifadesinin türü \texttt{void}'dir.
+    \item \textbf{Integral promotion} kuralı: \texttt{char c; +c} ifadesinin türü \texttt{int}'tir (karakter aritmetiği \texttt{int}'e yükseltilir).
+\end{itemize}
+
+\begin{lstlisting}
+char c1, c2;
+// c1 + c2 ifadesinin turu int'tir (integral promotion)
+static_assert(std::is_same_v<decltype(c1 + c2), int>);
+\end{lstlisting}
+
+%==============================================================================
+\section{Value Categories (Değer Kategorileri)}
+
+\subsection{Birincil (Primary) Değer Kategorileri}
+
+Her ifade \textbf{tam olarak bir} birincil kategoriye aittir:
+
+\begin{table}[h]
+\centering
+\begin{tabular}{@{}llcc@{}}
+\toprule
+\textbf{Kategori} & \textbf{Tam Adı} & \textbf{Kimliği Var mı?} & \textbf{Taşınabilir mi?} \\
+\midrule
+\textbf{lvalue}  & Locator Value  & Evet  & Hayır \\
+\textbf{prvalue} & Pure R-Value   & Hayır & Evet  \\
+\textbf{xvalue}  & Expiring Value & Evet  & Evet  \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Bileşik (Combined) Değer Kategorileri}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{@{}lll@{}}
+\toprule
+\textbf{Kategori} & \textbf{Eşdeğer} & \textbf{Tanım} \\
+\midrule
+\textbf{glvalue} & lvalue $\cup$ xvalue & Kimliği olan (has identity) tüm ifadeler \\
+\textbf{rvalue}  & prvalue $\cup$ xvalue & Taşınabilir (can be moved from) tüm ifadeler \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Venn Şeması}
+
+\begin{center}
+\begin{tikzpicture}[
+    every node/.style={font=\small},
+    box/.style={draw, rounded corners=2pt, minimum width=2.5cm, minimum height=1.5cm, align=center}
+]
+    % glvalue ellipse
+    \draw[thick, blue!60] (-1.5,0) ellipse (3.5cm and 2cm);
+    \node[blue!60, font=\bfseries] at (-1.5,2.3) {glvalue};
+
+    % rvalue ellipse
+    \draw[thick, red!60] (1.5,0) ellipse (3.5cm and 2cm);
+    \node[red!60, font=\bfseries] at (1.5,2.3) {rvalue};
+
+    % lvalue box
+    \node[box, fill=blue!10] at (-3,0) {\textbf{lvalue}\\identity\\\textit{!movable}};
+
+    % xvalue box (intersection)
+    \node[box, fill=purple!10] at (0,0) {\textbf{xvalue}\\identity\\\textit{movable}};
+
+    % prvalue box
+    \node[box, fill=red!10] at (3,0) {\textbf{prvalue}\\!identity\\\textit{movable}};
+\end{tikzpicture}
+\end{center}
+
+\begin{notebox}
+xvalue hem glvalue hem rvalue kümesinin elemanıdır. Bu, xvalue ifadelerin hem kimliğe sahip hem de taşınabilir olduğu anlamına gelir --- move semantiğinin temel taşıdır.
+\end{notebox}
+
+\begin{notebox}
+Value category bir \textbf{değişkenin} değil, bir \textbf{ifadenin} niteliğidir. \texttt{int\&\& r = 10;} bildiriminde \texttt{r} ifadesinin value category'si \textbf{lvalue}'dur (bir değişken ismi olduğu için), data type'ı ise \texttt{int}'tir.
+\end{notebox}
+
+%==============================================================================
+\section{Hangi İfade Hangi Kategoride?}
+
+\subsection{lvalue İfadeler}
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{@{}p{4cm}p{4cm}p{6cm}@{}}
+\toprule
+\textbf{İfade Türü} & \textbf{Örnek} & \textbf{Açıklama} \\
+\midrule
+Değişken isimleri & \texttt{x}, \texttt{name} & Rvalue ref bile olsa: \texttt{int\&\& r = 5;} $\rightarrow$ \texttt{r} lvalue \\
+Fonksiyon isimleri & \texttt{foo} & \texttt{std::move(foo)} bile lvalue üretir \\
+String literalleri & \texttt{"hello"} & Dizi gibi davranır $\rightarrow$ lvalue \\
+Prefix \texttt{++}/\texttt{-{}-} & \texttt{++a}, \texttt{-{}-a} & Nesnenin kendisini döndürür \\
+Atama operatörleri & \texttt{a = b}, \texttt{a += b} & Compound assignment dahil \\
+Üye erişimi & \texttt{obj.member} & Nesne lvalue ise erişim de lvalue \\
+\texttt{.*} / \texttt{->*} & \texttt{x.*mp} & Member pointer erişimi \\
+Dizi erişimi & \texttt{arr[n]} & Dizi lvalue ise \\
+Dereference & \texttt{*p} & Her zaman lvalue \\
+lvalue ref döndüren fonksiyon & \texttt{foo()} (\texttt{int\& foo();}) & Geri dönüş türü \texttt{T\&} ise \\
+lvalue ref'e cast & \texttt{static\_cast<T\&>(expr)} & Hedef tür lvalue referans ise \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{lstlisting}
+#include <string>
+#include <utility>
+
+int& get_ref();
+void example() {
+    int x = 42;
+    int&& rr = std::move(x);
+
+    // Hepsi lvalue:
+    x;                          // degisken ismi
+    rr;                         // rvalue ref degiskeni AMA ifade olarak lvalue!
+    "hello world";              // string literal
+    ++x;                        // prefix increment
+    get_ref();                  // lvalue ref donduren fonksiyon
+    *(&x);                      // dereference
+}
+\end{lstlisting}
+
+\begin{notebox}
+\texttt{int\&\& rr = std::move(x);} bildiriminde \texttt{rr}'nin \textbf{data type}'ı \texttt{int}'tir (ifade türü referans olamaz) ve \textbf{value category}'si \textbf{lvalue}'dur (bir isimdir). Tür ile kategoriyi karıştırmak en sık yapılan hatadır.
+\end{notebox}
+
+\subsection{prvalue İfadeler}
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{@{}p{5.5cm}p{5.5cm}@{}}
+\toprule
+\textbf{İfade Türü} & \textbf{Örnek} \\
+\midrule
+Tüm literaller (string hariç) & \texttt{42}, \texttt{3.14}, \texttt{'A'}, \texttt{true}, \texttt{nullptr} \\
+Aritmetik operatörler & \texttt{a + b}, \texttt{a * b} \\
+Karşılaştırma operatörleri & \texttt{a == b}, \texttt{a <=> b} \\
+Mantıksal operatörler & \texttt{a \&\& b}, \texttt{!a} \\
+Postfix \texttt{++}/\texttt{-{}-} & \texttt{a++}, \texttt{a-{}-} \\
+Adres operatörü & \texttt{\&x} \\
+\texttt{this} pointeri & Üye fonksiyon içinde \texttt{this} \\
+Enumerator'ler & \texttt{Color::Red} \\
+Lambda ifadeleri & \texttt{[](int x)\{ return x; \}} \\
+Geçici nesne oluşturma & \texttt{std::string\{"temp"\}} \\
+Referans döndürmeyen fonksiyon çağrısı & \texttt{foo()} (\texttt{int foo();}) \\
+Sign operatörü (\texttt{+}, \texttt{-}) & \texttt{+x}, \texttt{-x} \\
+\texttt{requires} ifadeleri & \texttt{requires \{ ... \}} (C++20) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{lstlisting}
+#include <string>
+
+int foo();
+void example() {
+    int a = 10;
+
+    // Hepsi prvalue:
+    42;                         // integer literal
+    a + 1;                      // aritmetik
+    a > 0;                      // karsilastirma
+    &a;                         // adres operatoru
+    foo();                      // non-ref donduren fonksiyon
+    std::string{"gecici"};      // temporary object
+    [](int x){ return x * 2; };// lambda ifadesi
+    +a;                         // sign operatoru
+}
+\end{lstlisting}
+
+\begin{notebox}
+Lambda ifadeleri derleyici tarafından closure type türünden \textbf{geçici nesne} (temporary object) olarak ele alınır, bu nedenle her zaman prvalue'dur. \texttt{auto f = []\{\};} bildiriminde \texttt{f} ifadesi lvalue'dur (isimlendirilmiş değişken), ama sağ taraftaki lambda ifadesinin kendisi prvalue'dur.
+\end{notebox}
+
+\subsection{xvalue İfadeler}
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{@{}p{5.5cm}p{5.5cm}@{}}
+\toprule
+\textbf{İfade Türü} & \textbf{Örnek} \\
+\midrule
+Rvalue ref döndüren fonksiyon çağrısı & \texttt{std::move(x)}, \texttt{std::forward<T>(x)} \\
+rvalue nesnenin üye erişimi & \texttt{std::move(obj).member}, \texttt{MyClass\{\}.x} \\
+rvalue nesne + \texttt{.*} & \texttt{std::move(obj).*mp} \\
+rvalue dizi erişimi & \texttt{std::move(arr)[0]} \\
+rvalue ref'e cast & \texttt{static\_cast<T\&\&>(expr)} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{lstlisting}
+#include <utility>
+
+struct Widget {
+    int data;
+};
+
+int&& rval_func();
+
+void example() {
+    Widget w{42};
+
+    // Hepsi xvalue:
+    std::move(w);                  // std::move -> T&& dondurur
+    rval_func();                   // rvalue ref donduren fonksiyon
+    Widget{}.data;                 // prvalue nesnenin member erisimi
+    static_cast<Widget&&>(w);      // rvalue ref'e cast
+
+    // Dizi ornegi:
+    using Arr5 = int[5];
+    Arr5{1,2,3,4,5}[0];           // rvalue dizinin elemanina erisim -> xvalue
+}
+\end{lstlisting}
+
+%==============================================================================
+\section{Referans Türleri ve Bağlama Kuralları}
+
+\subsection{Üç Referans Kategorisi}
+
+\begin{lstlisting}
+std::string& r1  = s;    // (1) lvalue reference
+std::string&& r2 = expr; // (2) rvalue reference
+// (3) forwarding (universal) reference - yalnizca tur cikarimi baglaminda:
+template<typename T>
+void func(T&& param);    // T&& burada forwarding reference
+\end{lstlisting}
+
+\begin{notebox}
+\texttt{T\&\&} ifadesi \textbf{yalnızca tür çıkarımı varsa} forwarding reference'tır. Aksi halde sıradan rvalue reference'tır. Bu ayrım perfect forwarding için kritiktir.
+\end{notebox}
+
+\subsection{Bağlama Kuralları Tablosu}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{@{}lccc@{}}
+\toprule
+\textbf{Referans Türü} & \textbf{lvalue} & \textbf{prvalue} & \textbf{xvalue} \\
+\midrule
+\texttt{T\&} (lvalue ref)             & Bağlanır & \textbf{HATA} & \textbf{HATA} \\
+\texttt{const T\&} (const lvalue ref) & Bağlanır & Bağlanır      & Bağlanır \\
+\texttt{T\&\&} (rvalue ref)           & \textbf{HATA} & Bağlanır & Bağlanır \\
+\texttt{const T\&\&} (const rvalue ref) & \textbf{HATA} & Bağlanır & Bağlanır \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{lstlisting}
+#include <string>
+#include <utility>
+
+void example() {
+    std::string name{"Necati"};
+
+    // lvalue reference - sadece lvalue'ya baglanir:
+    std::string& r1 = name;              // OK: lvalue
+    // std::string& r2 = std::string{}; // HATA: prvalue
+    // std::string& r3 = std::move(name);// HATA: xvalue
+
+    // const lvalue reference - her seye baglanir:
+    const std::string& cr1 = name;              // OK: lvalue
+    const std::string& cr2 = std::string{};     // OK: prvalue
+    const std::string& cr3 = std::move(name);   // OK: xvalue
+
+    // rvalue reference - sadece rvalue'ya baglanir:
+    std::string&& rr1 = std::string{};          // OK: prvalue
+    std::string&& rr2 = std::move(name);        // OK: xvalue
+    // std::string&& rr3 = name;                // HATA: lvalue
+}
+\end{lstlisting}
+
+\begin{notebox}
+\texttt{const T\&\&} pratikte neredeyse hiç kullanılmaz; ancak function overload resolution kurallarını anlamak için varlığını bilmek gerekir.
+\end{notebox}
+
+%==============================================================================
+\section{Fonksiyon Geri Dönüş Türü ve Value Category İlişkisi}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{Geri Dönüş Türü} & \textbf{Çağrı İfadesinin Value Category'si} \\
+\midrule
+\texttt{T} (non-reference)     & \textbf{prvalue} \\
+\texttt{T\&} (lvalue reference) & \textbf{lvalue}  \\
+\texttt{T\&\&} (rvalue reference) & \textbf{xvalue}  \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{lstlisting}
+#include <string>
+
+std::string  by_value();  // cagri -> prvalue
+std::string& by_lref();   // cagri -> lvalue
+std::string&& by_rref();  // cagri -> xvalue
+
+// std::move'un xvalue uretmesinin sebebi:
+// std::move(x) -> geri donus turu T&& -> xvalue
+\end{lstlisting}
+
+%==============================================================================
+\section{\texttt{decltype} ile Value Category Tespiti}
+
+\texttt{decltype} specifier'ının \textbf{iki farklı çıkarım kuralı} vardır:
+
+\subsection{Kural 1 --- Operand Bir İsim (Identifier) İse}
+
+Çıkarım, ismin \textbf{bildirim türünü} (declared type) birebir verir:
+
+\begin{lstlisting}
+int x = 5;
+int& r = x;
+int&& rr = 10;
+const int& cr = x;
+
+struct S { int mx; };
+S obj;
+
+static_assert(std::is_same_v<decltype(x),       int>);
+static_assert(std::is_same_v<decltype(r),        int&>);
+static_assert(std::is_same_v<decltype(rr),       int&&>);
+static_assert(std::is_same_v<decltype(cr),       const int&>);
+static_assert(std::is_same_v<decltype(obj.mx),   int>);       // uye erisimi de isim
+\end{lstlisting}
+
+\subsection{Kural 2 --- Operand Bir İfade (Expression) İse}
+
+Çıkarım, ifadenin \textbf{value category}'sine göre belirlenir:
+
+\begin{table}[h]
+\centering
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{Value Category} & \textbf{\texttt{decltype} Ürettiği Tür} \\
+\midrule
+\textbf{lvalue}  & \texttt{T\&}  \\
+\textbf{prvalue} & \texttt{T}    \\
+\textbf{xvalue}  & \texttt{T\&\&} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{lstlisting}
+#include <utility>
+
+int x = 5;
+
+// Parantez eklemek ismi ifadeye donusturur:
+static_assert(std::is_same_v<decltype(x),    int>);    // isim -> declared type
+static_assert(std::is_same_v<decltype((x)),   int&>);   // ifade + lvalue -> T&
+
+// Value category tespiti:
+static_assert(std::is_same_v<decltype(42),              int>);    // prvalue -> T
+static_assert(std::is_same_v<decltype(std::move(x)),    int&&>);  // xvalue  -> T&&
+static_assert(std::is_same_v<decltype((x)),             int&>);   // lvalue  -> T&
+\end{lstlisting}
+
+\begin{notebox}
+\texttt{decltype(x)} ile \texttt{decltype((x))} \textbf{farklı sonuç üretir}. Parantez, ismi bir ifadeye dönüştürür. Bu fark, \texttt{decltype(auto)} kullanımında beklenmeyen referans döndürme hatalarına yol açabilir --- dikkat edilmesi gereken kritik bir noktadır.
+\end{notebox}
+
+\subsection{\texttt{decltype} ile Value Category Test Fonksiyonu (C++26)}
+
+\begin{lstlisting}
+#include <type_traits>
+#include <print>
+
+template<typename T>
+consteval void print_value_category() {
+    if constexpr (std::is_lvalue_reference_v<T>)
+        std::println("lvalue");
+    else if constexpr (std::is_rvalue_reference_v<T>)
+        std::println("xvalue");
+    else
+        std::println("prvalue");
+}
+
+// Kullanim:
+// print_value_category<decltype((expr))>();
+
+int main() {
+    int x = 42;
+    print_value_category<decltype((x))>();              // lvalue
+    print_value_category<decltype((std::move(x)))>();   // xvalue
+    print_value_category<decltype((42))>();              // prvalue
+}
+\end{lstlisting}
+
+%==============================================================================
+\section{Özet Karar Ağacı}
+
+\begin{center}
+\begin{tikzpicture}[
+    level distance=2cm,
+    sibling distance=4cm,
+    every node/.style={font=\small, align=center},
+    edge from parent/.style={draw, ->, thick},
+    level 1/.style={sibling distance=6cm},
+    level 2/.style={sibling distance=3cm}
+]
+\node {İfadenin value\\category'si nedir?}
+    child {node {İsim mi?\\(değişken, fonksiyon,\\string literal)}
+        child {node[draw, fill=blue!10, rounded corners] {\textbf{lvalue}\\{\scriptsize (rvalue ref değişkeni\\bile lvalue!)}}}
+    }
+    child {node {\texttt{std::move()} /\\rvalue ref döndüren\\fonksiyon mu?}
+        child {node[draw, fill=purple!10, rounded corners] {\textbf{xvalue}}}
+    }
+    child {node {Geçici nesne /\\literal / aritmetik /\\lambda mı?}
+        child {node[draw, fill=red!10, rounded corners] {\textbf{prvalue}}}
+    };
+\end{tikzpicture}
+\end{center}
+
+\noindent\textbf{Üye erişimi} (\texttt{obj.member}) için:
+\begin{itemize}
+    \item \texttt{obj} lvalue ise $\rightarrow$ \textbf{lvalue}
+    \item \texttt{obj} rvalue ise $\rightarrow$ \textbf{xvalue}
+\end{itemize}
+
+%==============================================================================
+\section{Low-Latency ve Yüksek Performans İçin Kritik Noktalar}
+
+\begin{notebox}
+Move semantiğinin temel motivasyonu gereksiz kopyalamaları ortadan kaldırmaktır. Bir nesne \textbf{xvalue} kategorisindeyse, kaynaklarının ``çalınabileceği'' (move edilebileceği) anlamına gelir. High-frequency trading, oyun motorları ve gerçek zamanlı sistemlerde bu ayrım doğrudan gecikme (latency) farkı yaratır --- özellikle \texttt{std::string}, \texttt{std::vector} gibi heap allocation yapan türlerde.
+\end{notebox}
+
+\begin{notebox}
+\texttt{const T\&} her value category'ye bağlanabilmesi sayesinde generic kod yazarken güvenli bir ``catch-all'' olarak kullanılır, ancak bu durumda move optimization devre dışı kalır. Performans-kritik kodda overload setinde \texttt{T\&\&} parametresinin bulunması, rvalue argümanlarda kopyalama yerine taşıma yapılmasını sağlar.
+\end{notebox}
+
+\end{document}
